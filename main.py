@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import ttk
 from tkinter import simpledialog
 from tkinter import messagebox
+from tkinter import filedialog
 
 
 class StopWatch:
@@ -112,7 +113,11 @@ class StopWatch:
 
         print("Saving...")
         category = simpledialog.askstring(title="Save Timer",
-                                          prompt="What did you do during this time?")
+                                          prompt="What did you do during this time? (Max length 10 characters)")
+
+        while 0 >= len(category) or len(category) > 10:
+            category = simpledialog.askstring(title="Save Timer",
+                                              prompt="Please enter a string shorter than 10 characters")
 
         # adds record with today's date, current timer and provided category
         self.hist.add_record(date.today().strftime("%d/%m/%Y") + " | " + self.get_label() + " | " + category)
@@ -127,34 +132,53 @@ class StopWatchHistory:
         :param hist_root: the root in which to show the history
         """
         self.hist_root = hist_root
-        self.history = []
+        self.history_categories = {}
         self.index = 1
         self.hist_gui = tk.Listbox(hist_root, width=45)
-        self.hist_gui.pack(side=tk.LEFT)
+        self.hist_gui.pack(side=tk.LEFT, padx=5, pady=5)
 
         # frame on the right side (details)
         self.f = tk.Frame(hist_root, height=220)
-        self.f.pack(side=tk.LEFT)
-        self.title_lab = tk.Label(self.f, text='Category: ', font=('Arial', 18))
-        self.title_lab.pack()
-        self.date_lab = tk.Label(self.f, text='Date: ', font=('Arial', 15))
-        self.date_lab.pack()
-        self.length_lab = tk.Label(self.f, text='Length: ', font=('Arial', 15))
-        self.length_lab.pack()
+        self.f.pack(side=tk.LEFT, padx=10)
+        self.title_lab = tk.Label(self.f, text='', font=('Arial', 12))
+        self.title_lab.pack(anchor='w')
+        self.date_lab = tk.Label(self.f, text='', font=('Arial', 10))
+        self.date_lab.pack(anchor='w')
+        self.length_lab = tk.Label(self.f, text='', font=('Arial', 10))
+        self.length_lab.pack(anchor='w')
 
-        self.delete_button = tk.Button(self.f, text='Delete', command=lambda: print('delete'))
-        self.delete_button.pack()
+        self.delete_button = tk.Button(self.f, text='Delete')
+        self.delete_button.pack(anchor='w', pady=5)
+        self.delete_button.configure(state=tk.DISABLED)
+
+        self.load_button = tk.Button(self.f, text='Load', command=self.fetch_records)
+        self.load_button.pack(anchor='w')
+        self.save_button = tk.Button(self.f, text='Save', command=self.save_records)
+        self.save_button.pack(anchor='w')
 
         self.hist_gui.bind("<<ListboxSelect>>", self.onselect)
 
     def onselect(self, e):
+        """
+        Update the right frame when a record from listbox is selected
+        :param e: selection event
+        """
         w = e.widget
+
+        # no record is selected => return
+        if not w.curselection():
+            return
+
         ind = int(w.curselection()[0])
         record = w.get(ind).split(' | ')
-        print(record)
+
+        # update labels with record data
         self.title_lab.configure(text='Category: ' + record[-1])
         self.date_lab.configure(text='Date: ' + record[0])
         self.length_lab.configure(text='Length: ' + record[1])
+
+        # activate delete button
+        self.delete_button.configure(state=tk.ACTIVE, command=lambda: self.delete_record(ind))
 
     def add_record(self, record):
         """
@@ -165,7 +189,66 @@ class StopWatchHistory:
         self.index += 1
 
     def delete_record(self, ind):
-        pass
+        """
+        Delete record from listbox
+        :param ind: index of record to be deleted
+        """
+        self.hist_gui.delete(ind)
+        self.reset_labels()
+
+        if self.hist_gui.size() == 0:
+            self.delete_button.configure(state=tk.DISABLED)
+
+    def reset_labels(self):
+        """
+        Reset labels to their initial state (empty)
+        """
+        self.date_lab.configure(text='')
+        self.title_lab.configure(text='')
+        self.length_lab.configure(text='')
+
+    def fetch_records(self):
+        """
+        Fetch history records from a given file
+        """
+        filename = filedialog.askopenfilename(title="Open file",
+                                              filetypes=(("Text files", '*.txt'),
+                                                         ("All files", "*.*")))
+
+        # cancel pressed
+        if not filename:
+            return
+
+        try:
+            with open(filename, 'r') as f:
+                for record in f:
+                    self.add_record(record)
+        except FileNotFoundError:
+            messagebox.showerror(title="Error", message="File not found.")
+            # call function again
+            self.fetch_records()
+
+    def save_records(self):
+        """
+        Save records to a given filename
+        """
+        filename = filedialog.asksaveasfilename(title="Save file",
+                                                filetypes=(('Text files', '*.txt'),
+                                                           ('All files', '*.*')),
+                                                defaultextension=".txt")
+
+        # cancel pressed
+        if not filename:
+            return
+
+        try:
+            with open(filename, 'w') as f:
+                for rec in range(self.hist_gui.size()):
+                    f.write(self.hist_gui.get(rec))
+        except FileNotFoundError:
+            messagebox.showerror(title="Error", message="File not found.")
+            # call function again
+            self.save_records()
 
 
 class MainApp:
@@ -191,6 +274,7 @@ if __name__ == '__main__':
     root = tk.Tk()
     root.geometry('486x220')
     root.title('Stopwatch')
+    root.resizable(False, False)
 
     app = MainApp(root)
     root.mainloop()
