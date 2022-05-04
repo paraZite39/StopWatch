@@ -132,14 +132,14 @@ class StopWatchHistory:
         :param hist_root: the root in which to show the history
         """
         self.hist_root = hist_root
-        self.history_categories = {}
+        self.history_categories = dict()
         self.index = 1
         self.hist_gui = tk.Listbox(hist_root, width=45)
         self.hist_gui.pack(side=tk.LEFT, padx=5, pady=5)
 
         # frame on the right side (details)
-        self.f = tk.Frame(hist_root, height=220)
-        self.f.pack(side=tk.LEFT, padx=10)
+        self.f = tk.Frame(hist_root, height=350)
+        self.f.pack(side=tk.LEFT, padx=10, pady=20)
         self.title_lab = tk.Label(self.f, text='', font=('Arial', 12))
         self.title_lab.pack(anchor='w')
         self.date_lab = tk.Label(self.f, text='', font=('Arial', 10))
@@ -147,14 +147,16 @@ class StopWatchHistory:
         self.length_lab = tk.Label(self.f, text='', font=('Arial', 10))
         self.length_lab.pack(anchor='w')
 
-        self.delete_button = tk.Button(self.f, text='Delete')
-        self.delete_button.pack(anchor='w', pady=5)
+        self.button_frame = tk.Frame(self.f, pady=5)
+        self.button_frame.pack(side=tk.BOTTOM)
+        self.delete_button = tk.Button(self.button_frame, text='Delete')
+        self.delete_button.pack(side=tk.LEFT)
         self.delete_button.configure(state=tk.DISABLED)
 
-        self.load_button = tk.Button(self.f, text='Load', command=self.fetch_records)
-        self.load_button.pack(anchor='w')
-        self.save_button = tk.Button(self.f, text='Save', command=self.save_records)
-        self.save_button.pack(anchor='w')
+        self.load_button = tk.Button(self.button_frame, text='Load', command=self.load_records)
+        self.load_button.pack(side=tk.LEFT)
+        self.save_button = tk.Button(self.button_frame, text='Save', command=self.save_records)
+        self.save_button.pack(side=tk.LEFT)
 
         self.hist_gui.bind("<<ListboxSelect>>", self.onselect)
 
@@ -188,6 +190,10 @@ class StopWatchHistory:
         self.hist_gui.insert(self.index, record)
         self.index += 1
 
+        # add label to category list
+        category = record.split(' | ')[2]
+        self.history_categories[category] = self.history_categories.get(category, []) + [record]
+
     def delete_record(self, ind):
         """
         Delete record from listbox
@@ -207,10 +213,34 @@ class StopWatchHistory:
         self.title_lab.configure(text='')
         self.length_lab.configure(text='')
 
-    def fetch_records(self):
+    def load_records(self):
         """
         Fetch history records from a given file
         """
+
+        def is_valid(line):
+            """
+            Check if record line is valid (date, timer and label)
+            :param line: record to be checked
+            :return: True if record is valid, False otherwise
+            """
+
+            import re
+            elements = line.split(' | ')
+            if len(elements) == 3:
+                # record contains a date of format dd/mm/yyyy
+                valid_date = re.match(r"^\d{2}/\d{2}/\d{4}$", elements[0])
+                # record contains a timer of format hh:mm:ss
+                valid_time = re.match(r"^\d{2}:\d{2}:\d{2}$", elements[1])
+                # record contains a label (between 1 and 10 characters)
+                valid_label = re.match(r"^.{1,10}$", elements[2])
+
+                if valid_date and valid_time and valid_label:
+                    return True
+
+            return False
+
+        # start load by asking for filename
         filename = filedialog.askopenfilename(title="Open file",
                                               filetypes=(("Text files", '*.txt'),
                                                          ("All files", "*.*")))
@@ -221,17 +251,30 @@ class StopWatchHistory:
 
         try:
             with open(filename, 'r') as f:
+                invalid_file = True
                 for record in f:
-                    self.add_record(record)
+                    record = record[:-1]
+                    # if record respects format defined at the start of this function
+                    if is_valid(record) and not self.is_duplicate(record):
+                        invalid_file = False
+                        self.add_record(record)
+
+                # no valid records found in file
+                if invalid_file:
+                    messagebox.showerror(title="Error", message="No useful records found on file.")
         except FileNotFoundError:
             messagebox.showerror(title="Error", message="File not found.")
             # call function again
-            self.fetch_records()
+            self.load_records()
 
     def save_records(self):
         """
         Save records to a given filename
         """
+        if self.hist_gui.size() == 0:
+            messagebox.showerror(title="Error", message="Cannot save empty list.")
+            return
+
         filename = filedialog.asksaveasfilename(title="Save file",
                                                 filetypes=(('Text files', '*.txt'),
                                                            ('All files', '*.*')),
@@ -243,12 +286,27 @@ class StopWatchHistory:
 
         try:
             with open(filename, 'w') as f:
+                # iterate through records in list box, writing them to file
                 for rec in range(self.hist_gui.size()):
                     f.write(self.hist_gui.get(rec))
         except FileNotFoundError:
             messagebox.showerror(title="Error", message="File not found.")
             # call function again
             self.save_records()
+
+    def is_duplicate(self, record):
+        """
+        Given a certain record, iterates through existing list to see if it's a duplicate
+        :param record: the record to be checked for duplicates
+        :return: True if record is a duplicate, False otherwise
+        """
+        for ind in range(self.hist_gui.size()):
+            rec = self.hist_gui.get(ind)
+            print(rec, record)
+            if rec == record:
+                return True
+
+        return False
 
 
 class MainApp:
