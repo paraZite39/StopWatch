@@ -6,6 +6,43 @@ from tkinter import messagebox
 from tkinter import filedialog
 
 
+class LabelDialog:
+    def __init__(self, popup_root, categories):
+        """
+        Creates a custom pop-up that prompts for the timer label and category
+        :param popup_root: the pop-up parent
+        :param categories: list of label categories (ex. work, study...)
+        """
+        top = self.top = tk.Toplevel(popup_root)
+        self.final_label = None
+        self.final_category = None
+
+        self.label = tk.Label(top, text="What did you do during this time? (10 chars max)")
+        self.label.grid(row=0, padx=10, pady=10)
+
+        self.myEntryBox = tk.Entry(top)
+        self.myEntryBox.grid(row=0, column=1, padx=10, pady=10)
+
+        self.cat_label = tk.Label(top, text="What category does this label go into?")
+        self.cat_label.grid(row=1, column=0)
+
+        self.cat_input = tk.StringVar()
+        self.category_combo = ttk.Combobox(top, textvariable=self.cat_input, values=categories)
+        self.category_combo.grid(row=1, column=1, padx=10)
+
+        self.mySubmitButton = tk.Button(top, text='Submit', command=self.send)
+        self.mySubmitButton.grid(row=2, column=0, padx=10, pady=10)
+
+    def send(self):
+        """
+        Submit button pressed, set final label and category values and destroy pop-up
+        :return:
+        """
+        self.final_label = self.myEntryBox.get()
+        self.final_category = self.cat_input.get()
+        self.top.destroy()
+
+
 class StopWatch:
     def __init__(self, watch_root, hist):
         """
@@ -14,6 +51,7 @@ class StopWatch:
         :param hist: stopwatch history in which to store records
         """
         self.hist = hist
+        self.root = watch_root
 
         # id for recursive tick function
         self.after_id = None
@@ -112,15 +150,21 @@ class StopWatch:
             self.running = False
 
         print("Saving...")
-        category = simpledialog.askstring(title="Save Timer",
-                                          prompt="What did you do during this time? (Max length 10 characters)")
+        category_values = self.hist.history_categories.keys()
+        res = LabelDialog(self.root, tuple(category_values))
+        self.root.wait_window(res.top)
 
-        while 0 >= len(category) or len(category) > 10:
-            category = simpledialog.askstring(title="Save Timer",
-                                              prompt="Please enter a string shorter than 10 characters")
+        lab = res.final_label
+
+        while 0 >= len(lab) or len(lab) > 10:
+            res = LabelDialog(self.root, tuple(category_values))
+
+        final_label = res.final_label
+        final_category = res.final_category
 
         # adds record with today's date, current timer and provided category
-        self.hist.add_record(date.today().strftime("%d/%m/%Y") + " | " + self.get_label() + " | " + category)
+        formatted_label = " | ".join([date.today().strftime("%d/%m/%Y"), self.get_label(), final_label])
+        self.hist.add_record(formatted_label, final_category)
         self.start_button.configure(state=tk.ACTIVE)
         self.reset()
 
@@ -132,10 +176,23 @@ class StopWatchHistory:
         :param hist_root: the root in which to show the history
         """
         self.hist_root = hist_root
-        self.history_categories = dict()
+        self.history_categories = {'Work': [], 'Study': [], 'Exercise': [], 'Other': []}
         self.index = 1
-        self.hist_gui = tk.Listbox(hist_root, width=45)
+        self.hist_gui = ttk.Treeview(hist_root)
+        self.hist_gui['columns'] = ("Date", "Length", "Label")
+        self.hist_gui.column("#0", width=75, minwidth=25)
+        self.hist_gui.column("Date", anchor=tk.W, width=70)
+        self.hist_gui.column("Length", anchor=tk.CENTER, width=60)
+        self.hist_gui.column("Label", anchor=tk.W, width=100)
+
+        self.hist_gui.heading("#0", text="Category", anchor=tk.W)
+        self.hist_gui.heading("Date", text="Date", anchor=tk.W)
+        self.hist_gui.heading("Length", text="Length", anchor=tk.CENTER)
+        self.hist_gui.heading("Label", text="Label", anchor=tk.W)
+
         self.hist_gui.pack(side=tk.LEFT, padx=5, pady=5)
+
+        self.init_tree()
 
         # frame on the right side (details)
         self.f = tk.Frame(hist_root, height=350)
@@ -158,41 +215,50 @@ class StopWatchHistory:
         self.save_button = tk.Button(self.button_frame, text='Save', command=self.save_records)
         self.save_button.pack(side=tk.LEFT)
 
-        self.hist_gui.bind("<<ListboxSelect>>", self.onselect)
+        self.hist_gui.bind("<<TreeviewSelect>>", self.onselect)
 
-    def onselect(self, e):
+    def init_tree(self):
+        for ind, cat in enumerate(self.history_categories.keys()):
+            self.hist_gui.insert(parent='', index='end', iid=cat, text=cat, values=())
+
+    def onselect(self, _):
         """
-        Update the right frame when a record from listbox is selected
+        Update the right frame when a record from tree is selected
         :param e: selection event
         """
-        w = e.widget
+        date, length, label = None, None, None
+
+        selection = self.hist_gui.selection()
+        selected_item = self.hist_gui.item(selection)
 
         # no record is selected => return
-        if not w.curselection():
+        if not selected_item:
             return
 
-        ind = int(w.curselection()[0])
-        record = w.get(ind).split(' | ')
+        vals = selected_item.values()
+
+        if len(vals) == 3:
+            date, length, label = vals
 
         # update labels with record data
-        self.title_lab.configure(text='Category: ' + record[-1])
-        self.date_lab.configure(text='Date: ' + record[0])
-        self.length_lab.configure(text='Length: ' + record[1])
+        self.title_lab.configure(text='Label: ' + (label or 'null'))
+        self.date_lab.configure(text='Date: ' + (date or 'null'))
+        self.length_lab.configure(text='Length: ' + (length or 'null'))
 
         # activate delete button
-        self.delete_button.configure(state=tk.ACTIVE, command=lambda: self.delete_record(ind))
+        self.delete_button.configure(state=tk.ACTIVE, command=lambda: self.delete_record(selection))
 
-    def add_record(self, record):
+    def add_record(self, record, category):
         """
         Enters record into the history
         :param record: the record to be introduced
+        :param category: the label's category
         """
-        self.hist_gui.insert(self.index, record)
-        self.index += 1
-
-        # add label to category list
-        category = record.split(' | ')[2]
+        date, length, label = record.split(' | ')
         self.history_categories[category] = self.history_categories.get(category, []) + [record]
+        self.hist_gui.insert(parent=category, index=self.index, text="", values=(date, length, label))
+        self.index += 1
+        print(self.history_categories)
 
     def delete_record(self, ind):
         """
@@ -226,17 +292,19 @@ class StopWatchHistory:
             """
 
             import re
-            elements = line.split(' | ')
-            if len(elements) == 3:
-                # record contains a date of format dd/mm/yyyy
-                valid_date = re.match(r"^\d{2}/\d{2}/\d{4}$", elements[0])
-                # record contains a timer of format hh:mm:ss
-                valid_time = re.match(r"^\d{2}:\d{2}:\d{2}$", elements[1])
-                # record contains a label (between 1 and 10 characters)
-                valid_label = re.match(r"^.{1,10}$", elements[2])
+            if len(line.split(' ')) == 2:
+                label, category = line.split(' ')
+                elements = label.split(' | ')
+                if len(elements) == 3:
+                    # record contains a date of format dd/mm/yyyy
+                    valid_date = re.match(r"^\d{2}/\d{2}/\d{4}$", elements[0])
+                    # record contains a timer of format hh:mm:ss
+                    valid_time = re.match(r"^\d{2}:\d{2}:\d{2}$", elements[1])
+                    # record contains a label (between 1 and 10 characters)
+                    valid_label = re.match(r"^.{1,10}$", elements[2])
 
-                if valid_date and valid_time and valid_label:
-                    return True
+                    if valid_date and valid_time and valid_label:
+                        return True
 
             return False
 
