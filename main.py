@@ -17,12 +17,15 @@ class LabelDialog:
         self.final_label = None
         self.final_category = None
 
+        # prompt for label
         self.label = tk.Label(top, text="What did you do during this time? (10 chars max)")
         self.label.grid(row=0, padx=10, pady=10)
 
         self.myEntryBox = tk.Entry(top)
         self.myEntryBox.grid(row=0, column=1, padx=10, pady=10)
+        self.myEntryBox.focus()
 
+        # prompt for category
         self.cat_label = tk.Label(top, text="What category does this label go into?")
         self.cat_label.grid(row=1, column=0)
 
@@ -30,18 +33,25 @@ class LabelDialog:
         self.category_combo = ttk.Combobox(top, textvariable=self.cat_input, values=categories)
         self.category_combo.grid(row=1, column=1, padx=10)
 
+        # focus combobox on first item
+        self.category_combo.current(0)
+
+        # submit button
         self.mySubmitButton = tk.Button(top, text='Submit', command=self.send)
         self.mySubmitButton.grid(row=2, column=0, padx=10, pady=10)
+
+        self.top.protocol("WM_DELETE_WINDOW", self.on_closing)
 
     def send(self):
         """
         Submit button pressed, set final label and category values and destroy pop-up
-        :return:
         """
         self.final_label = self.myEntryBox.get()
         self.final_category = self.cat_input.get()
         self.top.destroy()
 
+    def on_closing(self):
+        print("Closed window")
 
 class StopWatch:
     def __init__(self, watch_root, hist):
@@ -84,11 +94,14 @@ class StopWatch:
         :return: stopwatch label
         """
         s = self.seconds
+        # get number of hours (1h = 3600 seconds), subtract from counter
         h = s // 3600
         s -= (h * 3600)
+        # get number of minutes (1m = 60 seconds), subtract from counter
         m = s // 60
         s -= (m * 60)
 
+        # format as hh:mm:ss
         return f'{round(h):02}:{round(m):02}:{round(s):02}'
 
     def start(self):
@@ -142,19 +155,23 @@ class StopWatch:
         """
         Saves current timer (prompts for category) and resets
         """
+        # no seconds elapsed
         if self.seconds == 0:
             messagebox.showerror(title="Empty Save", message="Cannot save record of 0 seconds!")
             return
 
+        # stop if running
         if self.running:
             self.running = False
 
+        # prompt user for label and category
         category_values = self.hist.history_categories.keys()
         res = LabelDialog(self.root, tuple(category_values))
-        self.root.wait_window(res.top)
+        self.root.wait_window(res.top)  # wait for prompt to be answered
 
         lab = res.final_label
 
+        # label must be between 1 and 10 chars
         while 0 >= len(lab) or len(lab) > 10:
             res = LabelDialog(self.root, tuple(category_values))
 
@@ -177,6 +194,8 @@ class StopWatchHistory:
         self.hist_root = hist_root
         self.history_categories = {'Work': [], 'Study': [], 'Exercise': [], 'Other': []}
         self.index = 1
+
+        # tree for displaying records
         self.hist_gui = ttk.Treeview(hist_root)
         self.hist_gui['columns'] = ("Date", "Length", "Label")
         self.hist_gui.column("#0", width=75, minwidth=25)
@@ -203,6 +222,7 @@ class StopWatchHistory:
         self.length_lab = tk.Label(self.f, text='', font=('Arial', 10))
         self.length_lab.pack(anchor='w')
 
+        # frame for buttons (delete, load, save)
         self.button_frame = tk.Frame(self.f, pady=5)
         self.button_frame.pack(side=tk.BOTTOM)
         self.delete_button = tk.Button(self.button_frame, text='Delete')
@@ -214,33 +234,37 @@ class StopWatchHistory:
         self.save_button = tk.Button(self.button_frame, text='Save', command=self.save_records)
         self.save_button.pack(side=tk.LEFT)
 
+        # respond to click on the treeview
         self.hist_gui.bind("<ButtonRelease-1>", self.onselect)
 
     def init_tree(self):
+        """
+        Takes categories from the 'history_categories' dict and inserts them in treeview
+        """
         for ind, cat in enumerate(self.history_categories.keys()):
             self.hist_gui.insert(parent='', index='end', iid=cat, text=cat, values=())
 
     def onselect(self, _):
         """
         Update the right frame when a record from tree is selected
-        :param _:
-        :param e: selection event
+        :param _: event parameter, not used
         """
         date, length, label = None, None, None
 
+        # take selected treeview item
         selection = self.hist_gui.focus()
 
         if not selection:
             return
 
+        # take selected item's parent (category)
         category = self.hist_gui.parent(selection)
+        # take selected item's values (date, length, label)
         vals = self.hist_gui.item(selection, 'values')
 
         # no record is selected => return
         if not vals:
             return
-
-        print(vals)
 
         if len(vals) == 3:
             date, length, label = vals
@@ -261,25 +285,39 @@ class StopWatchHistory:
         :param category: the label's category
         """
         date, length, label = record.split(' | ')
-        self.history_categories[category] = self.history_categories.get(category, []) + [record]
-        self.hist_gui.insert(parent=category, index=self.index, text="", values=(date, length, label))
-        self.index += 1
-        print(self.history_categories)
+        if not self.is_duplicate(record, category):
+            # add record to category dict
+            self.history_categories[category] = self.history_categories.get(category, []) + [record]
+            # add record to treeview
+            self.hist_gui.insert(parent=category, index=self.index, text="", values=(date, length, label))
+            self.index += 1
+        else:
+            messagebox.showerror(title="Duplicate label", message="Duplicate label, please try again.")
+            new_record, new_label = None, ''
+            # if label is empty, duplicate or too long
+            while (not new_record or not new_label
+                   or self.is_duplicate(new_record, category) or len(new_label) > 10):
+                new_label = simpledialog.askstring("New label", prompt="Please enter new label:")
+                new_record = ' | '.join([date, length, new_label or 'default'])
+
+            self.add_record(new_record, category)
 
     def delete_record(self, ind, label, category):
         """
         Delete record from treeview
+        :param category: record's category
+        :param ind: record's index
         :param label: record to be deleted
         """
+        # delete record from treeview (with index)
         self.hist_gui.delete(ind)
-        print(label, category, self.history_categories[category])
+        # delete record from category dict
         self.history_categories[category].remove(label)
+
         self.reset_labels()
 
         if self.hist_gui.size() == 0:
             self.delete_button.configure(state=tk.DISABLED)
-
-        print(self.history_categories)
 
     def reset_labels(self):
         """
@@ -293,17 +331,16 @@ class StopWatchHistory:
         """
         Fetch history records from a given file
         """
-
-        def is_valid(label):
+        def is_valid(line):
             """
             Check if record line is valid (date, timer and label)
-            :param label: record to be checked
+            :param line: line to be checked
             :return: True if record is valid, False otherwise
             """
 
             import re
 
-            elements = label.split(' | ')
+            elements = line.split(' | ')
             if len(elements) == 3:
                 # record contains a date of format dd/mm/yyyy
                 valid_date = re.match(r"^\d{2}/\d{2}/\d{4}$", elements[0])
@@ -328,22 +365,25 @@ class StopWatchHistory:
 
         try:
             with open(filename, 'r') as f:
+                # invalid file = no usable records / all duplicates
                 invalid_file = True
                 for record in f:
                     record = record.strip('\n')
+                    # label and category, split by tab '\t'
                     if len(record.split('\t')) == 2:
                         label, category = record.split('\t')
-                        print('label, category', label, category)
-                        # if record respects format defined at the start of this function
-                        print(is_valid(label), self.is_duplicate(label, category), category in self.history_categories.keys())
+                        # if record respects format defined at the start of this function,
+                        # isn't duplicate and category is valid
                         if is_valid(label) and not self.is_duplicate(label, category) \
                                 and category in self.history_categories.keys():
+                            # file isn't invalid, as a record was found
                             invalid_file = False
                             self.add_record(label, category)
 
                 # no valid records found in file
                 if invalid_file:
                     messagebox.showerror(title="Error", message="No useful records found on file.")
+
         except FileNotFoundError:
             messagebox.showerror(title="Error", message="File not found.")
             # call function again
@@ -353,10 +393,12 @@ class StopWatchHistory:
         """
         Save records to a given filename
         """
+        # no records to save
         if self.hist_gui.size() == 0:
             messagebox.showerror(title="Error", message="Cannot save empty list.")
             return
 
+        # prompt for filename
         filename = filedialog.asksaveasfilename(title="Save file",
                                                 filetypes=(('Text files', '*.txt'),
                                                            ('All files', '*.*')),
