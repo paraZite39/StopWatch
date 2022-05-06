@@ -149,7 +149,6 @@ class StopWatch:
         if self.running:
             self.running = False
 
-        print("Saving...")
         category_values = self.hist.history_categories.keys()
         res = LabelDialog(self.root, tuple(category_values))
         self.root.wait_window(res.top)
@@ -215,7 +214,7 @@ class StopWatchHistory:
         self.save_button = tk.Button(self.button_frame, text='Save', command=self.save_records)
         self.save_button.pack(side=tk.LEFT)
 
-        self.hist_gui.bind("<<TreeviewSelect>>", self.onselect)
+        self.hist_gui.bind("<ButtonRelease-1>", self.onselect)
 
     def init_tree(self):
         for ind, cat in enumerate(self.history_categories.keys()):
@@ -224,18 +223,24 @@ class StopWatchHistory:
     def onselect(self, _):
         """
         Update the right frame when a record from tree is selected
+        :param _:
         :param e: selection event
         """
         date, length, label = None, None, None
 
-        selection = self.hist_gui.selection()
-        selected_item = self.hist_gui.item(selection)
+        selection = self.hist_gui.focus()
 
-        # no record is selected => return
-        if not selected_item:
+        if not selection:
             return
 
-        vals = selected_item.values()
+        category = self.hist_gui.parent(selection)
+        vals = self.hist_gui.item(selection, 'values')
+
+        # no record is selected => return
+        if not vals:
+            return
+
+        print(vals)
 
         if len(vals) == 3:
             date, length, label = vals
@@ -246,7 +251,8 @@ class StopWatchHistory:
         self.length_lab.configure(text='Length: ' + (length or 'null'))
 
         # activate delete button
-        self.delete_button.configure(state=tk.ACTIVE, command=lambda: self.delete_record(selection))
+        self.delete_button.configure(state=tk.ACTIVE,
+                                     command=lambda: self.delete_record(selection, ' | '.join(vals), category))
 
     def add_record(self, record, category):
         """
@@ -260,16 +266,20 @@ class StopWatchHistory:
         self.index += 1
         print(self.history_categories)
 
-    def delete_record(self, ind):
+    def delete_record(self, ind, label, category):
         """
-        Delete record from listbox
-        :param ind: index of record to be deleted
+        Delete record from treeview
+        :param label: record to be deleted
         """
         self.hist_gui.delete(ind)
+        print(label, category, self.history_categories[category])
+        self.history_categories[category].remove(label)
         self.reset_labels()
 
         if self.hist_gui.size() == 0:
             self.delete_button.configure(state=tk.DISABLED)
+
+        print(self.history_categories)
 
     def reset_labels(self):
         """
@@ -284,27 +294,26 @@ class StopWatchHistory:
         Fetch history records from a given file
         """
 
-        def is_valid(line):
+        def is_valid(label):
             """
             Check if record line is valid (date, timer and label)
-            :param line: record to be checked
+            :param label: record to be checked
             :return: True if record is valid, False otherwise
             """
 
             import re
-            if len(line.split(' ')) == 2:
-                label, category = line.split(' ')
-                elements = label.split(' | ')
-                if len(elements) == 3:
-                    # record contains a date of format dd/mm/yyyy
-                    valid_date = re.match(r"^\d{2}/\d{2}/\d{4}$", elements[0])
-                    # record contains a timer of format hh:mm:ss
-                    valid_time = re.match(r"^\d{2}:\d{2}:\d{2}$", elements[1])
-                    # record contains a label (between 1 and 10 characters)
-                    valid_label = re.match(r"^.{1,10}$", elements[2])
 
-                    if valid_date and valid_time and valid_label:
-                        return True
+            elements = label.split(' | ')
+            if len(elements) == 3:
+                # record contains a date of format dd/mm/yyyy
+                valid_date = re.match(r"^\d{2}/\d{2}/\d{4}$", elements[0])
+                # record contains a timer of format hh:mm:ss
+                valid_time = re.match(r"^\d{2}:\d{2}:\d{2}$", elements[1])
+                # record contains a label (between 1 and 10 characters)
+                valid_label = re.match(r"^.{1,10}$", elements[2])
+
+                if valid_date and valid_time and valid_label:
+                    return True
 
             return False
 
@@ -321,11 +330,16 @@ class StopWatchHistory:
             with open(filename, 'r') as f:
                 invalid_file = True
                 for record in f:
-                    record = record[:-1]
-                    # if record respects format defined at the start of this function
-                    if is_valid(record) and not self.is_duplicate(record):
-                        invalid_file = False
-                        self.add_record(record)
+                    record = record.strip('\n')
+                    if len(record.split('\t')) == 2:
+                        label, category = record.split('\t')
+                        print('label, category', label, category)
+                        # if record respects format defined at the start of this function
+                        print(is_valid(label), self.is_duplicate(label, category), category in self.history_categories.keys())
+                        if is_valid(label) and not self.is_duplicate(label, category) \
+                                and category in self.history_categories.keys():
+                            invalid_file = False
+                            self.add_record(label, category)
 
                 # no valid records found in file
                 if invalid_file:
@@ -355,24 +369,26 @@ class StopWatchHistory:
         try:
             with open(filename, 'w') as f:
                 # iterate through records in list box, writing them to file
-                for rec in range(self.hist_gui.size()):
-                    f.write(self.hist_gui.get(rec))
+                for category in self.history_categories:
+                    records = self.history_categories[category]
+                    for line in records:
+                        write_line = line + "\t" + category + "\n"
+                        f.write(write_line)
         except FileNotFoundError:
             messagebox.showerror(title="Error", message="File not found.")
             # call function again
             self.save_records()
 
-    def is_duplicate(self, record):
+    def is_duplicate(self, record, category):
         """
         Given a certain record, iterates through existing list to see if it's a duplicate
         :param record: the record to be checked for duplicates
+        :param category: the record's category
         :return: True if record is a duplicate, False otherwise
         """
-        for ind in range(self.hist_gui.size()):
-            rec = self.hist_gui.get(ind)
-            print(rec, record)
-            if rec == record:
-                return True
+        records = self.history_categories[category]
+        if record in records:
+            return True
 
         return False
 
