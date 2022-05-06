@@ -16,6 +16,7 @@ class LabelDialog:
         top = self.top = tk.Toplevel(popup_root)
         self.final_label = None
         self.final_category = None
+        self.canceled = False
 
         # prompt for label
         self.label = tk.Label(top, text="What did you do during this time? (10 chars max)")
@@ -51,7 +52,13 @@ class LabelDialog:
         self.top.destroy()
 
     def on_closing(self):
-        print("Closed window")
+        sure = messagebox.askyesno(title="Cancelling label",
+                                   message="Are you sure you want to cancel? Record will not be saved.")
+        if sure:
+            self.canceled = True
+
+        self.top.destroy()
+
 
 class StopWatch:
     def __init__(self, watch_root, hist):
@@ -169,7 +176,11 @@ class StopWatch:
         res = LabelDialog(self.root, tuple(category_values))
         self.root.wait_window(res.top)  # wait for prompt to be answered
 
-        lab = res.final_label
+        if not res.canceled:
+            lab = res.final_label
+        else:
+            self.start_button.configure(state=tk.ACTIVE)
+            return
 
         # label must be between 1 and 10 chars
         while 0 >= len(lab) or len(lab) > 10:
@@ -189,6 +200,7 @@ class StopWatchHistory:
     def __init__(self, hist_root):
         """
         Initializes stopwatch history
+        When application is started, it will search for file 'history.txt'
         :param hist_root: the root in which to show the history
         """
         self.hist_root = hist_root
@@ -236,6 +248,13 @@ class StopWatchHistory:
 
         # respond to click on the treeview
         self.hist_gui.bind("<ButtonRelease-1>", self.onselect)
+
+        # automatically load records from history.txt
+        try:
+            self.load_records('history.txt')
+        except FileNotFoundError:
+            print("History file not found...")
+            pass
 
     def init_tree(self):
         """
@@ -327,9 +346,10 @@ class StopWatchHistory:
         self.title_lab.configure(text='')
         self.length_lab.configure(text='')
 
-    def load_records(self):
+    def load_records(self, filename=None):
         """
         Fetch history records from a given file
+        :param filename(optional) - filename from which to load records
         """
         def is_valid(line):
             """
@@ -354,10 +374,12 @@ class StopWatchHistory:
 
             return False
 
-        # start load by asking for filename
-        filename = filedialog.askopenfilename(title="Open file",
-                                              filetypes=(("Text files", '*.txt'),
-                                                         ("All files", "*.*")))
+        if not filename:
+            # start load by asking for filename
+            filename = filedialog.askopenfilename(title="Open file",
+                                                  filetypes=(("Text files", '*.txt'),
+                                                             ("All files", "*.*")),
+                                                  initialfile="history.txt")
 
         # cancel pressed
         if not filename:
@@ -402,7 +424,8 @@ class StopWatchHistory:
         filename = filedialog.asksaveasfilename(title="Save file",
                                                 filetypes=(('Text files', '*.txt'),
                                                            ('All files', '*.*')),
-                                                defaultextension=".txt")
+                                                defaultextension=".txt",
+                                                initialfile="history.txt")
 
         # cancel pressed
         if not filename:
@@ -441,6 +464,7 @@ class MainApp:
         Initializes main stopwatch app
         :param main_root: the root in which to display the app
         """
+        self.root = main_root
         # two tabs - stopwatch and history
         self.tab_control = ttk.Notebook(main_root)
         self.tab1 = ttk.Frame(self.tab_control)
@@ -452,6 +476,20 @@ class MainApp:
 
         self.history = StopWatchHistory(self.tab2)
         self.stopwatch = StopWatch(self.tab1, self.history)
+
+        main_root.protocol("WM_DELETE_WINDOW", self.close_app)
+
+    def close_app(self):
+        """
+        Called when the user presses the 'X' button. Asks confirmation for closing and saving records
+        """
+        sure_close = messagebox.askyesno(title="Close", message="Are you sure you want to close this application?")
+        if sure_close:
+            save = messagebox.askyesno(title="Save", message="Would you like to save your records?")
+            if save:
+                self.history.save_records()
+
+        self.root.destroy()
 
 
 if __name__ == '__main__':
