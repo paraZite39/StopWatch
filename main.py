@@ -4,6 +4,9 @@ from tkinter import ttk
 from tkinter import simpledialog
 from tkinter import messagebox
 from tkinter import filedialog
+from PIL import ImageTk, Image
+import glob
+import random
 
 
 class LabelDialog:
@@ -54,46 +57,65 @@ class LabelDialog:
     def on_closing(self):
         sure = messagebox.askyesno(title="Cancelling label",
                                    message="Are you sure you want to cancel? Record will not be saved.")
+        print(sure)
         if sure:
             self.canceled = True
-
-        self.top.destroy()
+            self.top.destroy()
 
 
 class StopWatch:
-    def __init__(self, watch_root, hist):
+    def __init__(self, watch_root, hist, photos):
         """
         Initializes stopwatch
         :param watch_root: tk root in which to put the elements
         :param hist: stopwatch history in which to store records
+        :param photos: dict with pictures separated by categories
         """
         self.hist = hist
         self.root = watch_root
+        self.photos = photos
+        self.init_photo = self.get_photo('break')
+        self.photo_frame = tk.Label(self.root, image=self.init_photo)
+        self.photo_frame.pack(pady=10)
 
         # id for recursive tick function
         self.after_id = None
 
         self.running = False
         self.seconds = 0
-        self.stopwatch_label = tk.Label(watch_root, text='00:00:00', font=('Helvetica', 48))
+        self.stopwatch_label = tk.Label(watch_root, text=self.get_label(), font=('Helvetica', 48))
         self.stopwatch_label.pack()
 
         # main stopwatch buttons - start, pause, reset, quit
-        self.start_button = tk.Button(watch_root, text='start', height=3, width=7, bg='#567', fg='White',
+        self.button_frame = tk.Frame(watch_root)
+        self.start_button = tk.Button(self.button_frame, text='start', height=2, width=9, bg='#567', fg='White',
                                       font=('Arial', 20), command=self.start)
         self.start_button.pack(side=tk.LEFT)
 
-        self.pause_button = tk.Button(watch_root, text='pause', height=3, width=7, bg='#567', fg='White',
+        self.pause_button = tk.Button(self.button_frame, text='pause', height=2, width=9, bg='#567', fg='White',
                                       font=('Arial', 20), command=self.pause)
         self.pause_button.pack(side=tk.LEFT)
 
-        self.reset_button = tk.Button(watch_root, text='reset', height=3, width=7, bg='#567', fg='White',
+        self.reset_button = tk.Button(self.button_frame, text='reset', height=2, width=9,bg='#567', fg='White',
                                       font=('Arial', 20), command=self.reset)
         self.reset_button.pack(side=tk.LEFT)
 
-        self.quit_button = tk.Button(watch_root, text='save', height=3, width=7, bg='#567', fg='White',
+        self.quit_button = tk.Button(self.button_frame, text='save', height=2, width=9, bg='#567', fg='White',
                                      font=('Arial', 20), command=self.save)
         self.quit_button.pack(side=tk.LEFT)
+        self.button_frame.pack()
+
+        self.root.bind("<Key>", self.key_pressed)
+
+    def get_photo(self, cat):
+        """
+        Returns a random photo, given a category
+        :param cat: (no pun intended) category from which to pick photo
+        :return: photo
+        """
+
+        random_img = Image.open(random.choice(self.photos[cat]))
+        return ImageTk.PhotoImage(random_img.resize((225, 175)))
 
     def get_label(self):
         """
@@ -111,6 +133,15 @@ class StopWatch:
         # format as hh:mm:ss
         return f'{round(h):02}:{round(m):02}:{round(s):02}'
 
+    def update_label(self):
+        self.stopwatch_label.configure(text=self.get_label())
+
+    def update_photo(self, cat):
+        new_img = self.get_photo(cat)
+        print(new_img)
+        self.photo_frame.configure(image=new_img)
+        self.photo_frame.image = new_img
+
     def start(self):
         """
         Starts the stopwatch. Works only if stopwatch is not running
@@ -120,7 +151,8 @@ class StopWatch:
             self.running = True
 
             # set stopwatch label to current time, make it call tick function after a second
-            self.stopwatch_label.configure(text=self.get_label())
+            self.update_label()
+            self.update_photo('work')
             self.after_id = self.stopwatch_label.after(1000, self.tick)
 
     def pause(self):
@@ -129,22 +161,24 @@ class StopWatch:
         """
         if self.running:
             self.running = False
+            self.update_photo('break')
             self.start_button.configure(state=tk.ACTIVE)
 
-    def reset(self):
+    def reset(self, init_value=0):
         """
         Resets the stopwatch's second counter to 0, starts over if stopwatch is running
+        :param init_value (optional) - the number of seconds to reset to
         """
         if self.running:
             self.running = False
-            self.seconds = 0
+            self.seconds = init_value
 
             # cancels call to tick function
             self.stopwatch_label.after_cancel(self.after_id)
             self.start()
         else:
-            self.seconds = 0
-            self.stopwatch_label.configure(text=self.get_label())
+            self.seconds = init_value
+            self.update_label()
 
     def tick(self):
         """
@@ -153,7 +187,7 @@ class StopWatch:
         """
         if self.running:
             self.seconds += 1
-            self.stopwatch_label.config(text=self.get_label())
+            self.update_label()
 
             # calls function again after one second
             self.after_id = self.stopwatch_label.after(1000, self.tick)
@@ -195,9 +229,87 @@ class StopWatch:
         self.start_button.configure(state=tk.ACTIVE)
         self.reset()
 
+    def key_pressed(self, event):
+        print(event, event.keycode)
+        if event.keycode == 32: # space pressed
+            print('space')
+            if self.running:
+                self.running = False
+                self.pause()
+            else:
+                self.running = True
+                self.start()
+        elif event.keycode == 27:
+            print('esc')
+            sure = messagebox.askyesno(title="Reset", message="Are you sure you want to reset?")
+            if sure:
+                self.reset()
+
+
+class PomodoroTimer(StopWatch):
+    def __init__(self, timer_root, photos):
+        """
+        Initializes pomodoro timer
+        :param timer_root: tk root in which to put the elements
+        """
+        super().__init__(timer_root, None, photos)
+        self.is_focused = True
+        self.focus_count = 0
+        self.break_count = 0
+        self.focus_string = tk.StringVar(value=str(self.focus_count))
+        self.break_string = tk.StringVar(value=str(self.break_count))
+
+        self.focus_label = tk.Label(timer_root, text='Focus count: ' + str(self.focus_count))
+        self.break_label = tk.Label(timer_root, text='Break count: ' + str(self.break_string))
+        self.focus_label.pack()
+        self.break_label.pack()
+
+        self.seconds = 1500
+        self.update_label()
+
+    def tick(self):
+        """
+        Recursively ticks stopwatch every second (decrements second counter, updates label)
+        Should not be called directly, as it is only called by the start function
+        """
+        if self.running:
+            self.seconds -= 1
+            self.update_label()
+
+            if self.seconds <= 0:
+                self.timer_done()
+                return
+
+            # calls function again after one second
+            self.after_id = self.stopwatch_label.after(1000, self.tick)
+
+    def timer_done(self):
+        """
+        When second counter hits 0, this function is called to switch from focus to break or vice-versa.
+        """
+        if self.is_focused:
+            self.is_focused = False
+            self.focus_count += 1
+            self.reset(300)
+            if start_break := messagebox.askyesno(title="Focus done",
+                                                  message="Great work! Would you like to start the break now?"):
+                self.start()
+            else:
+                self.pause()
+
+        else:
+            self.is_focused = True
+            self.break_count += 1
+            self.reset(1500)
+            if start_focus := messagebox.askyesno(title="Break done",
+                                                  message="Break over! Would you like to start working now?"):
+                self.start()
+            else:
+                self.pause()
+
 
 class StopWatchHistory:
-    def __init__(self, hist_root):
+    def __init__(self, hist_root, photos):
         """
         Initializes stopwatch history
         When application is started, it will search for file 'history.txt'
@@ -206,6 +318,7 @@ class StopWatchHistory:
         self.hist_root = hist_root
         self.history_categories = {'Work': [], 'Study': [], 'Exercise': [], 'Other': []}
         self.index = 1
+        self.photos = photos
 
         # tree for displaying records
         self.hist_gui = ttk.Treeview(hist_root)
@@ -465,19 +578,33 @@ class MainApp:
         :param main_root: the root in which to display the app
         """
         self.root = main_root
+        self.photos = {}
+        self.photo_categories = ['work', 'break', 'exercise', 'other']
+        for cat in self.photo_categories:
+            self.photos[cat] = glob.glob(f'super_secret_pictures/{cat}_*.*')
+        print(self.photos)
+
         # two tabs - stopwatch and history
         self.tab_control = ttk.Notebook(main_root)
         self.tab1 = ttk.Frame(self.tab_control)
         self.tab2 = ttk.Frame(self.tab_control)
+        self.tab3 = ttk.Frame(self.tab_control)
 
         self.tab_control.add(self.tab1, text='Stopwatch')
         self.tab_control.add(self.tab2, text='History')
+        self.tab_control.add(self.tab3, text='Pomodoro')
         self.tab_control.pack()
 
-        self.history = StopWatchHistory(self.tab2)
-        self.stopwatch = StopWatch(self.tab1, self.history)
+        self.history = StopWatchHistory(self.tab2, self.photos)
+        self.stopwatch = StopWatch(self.tab1, self.history, self.photos)
+        self.pomodoro = PomodoroTimer(self.tab3, self.photos)
 
         main_root.protocol("WM_DELETE_WINDOW", self.close_app)
+        self.root.bind("<Key>", lambda event: self.key_press(event))
+
+    def key_press(self, event):
+        print(event)
+        print(self.tab_control.select())
 
     def close_app(self):
         """
@@ -489,12 +616,11 @@ class MainApp:
             if save:
                 self.history.save_records()
 
-        self.root.destroy()
+            self.root.destroy()
 
 
 if __name__ == '__main__':
     root = tk.Tk()
-    root.geometry('486x220')
     root.title('Stopwatch')
     root.resizable(False, False)
 
