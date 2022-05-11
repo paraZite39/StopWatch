@@ -57,7 +57,6 @@ class LabelDialog:
     def on_closing(self):
         sure = messagebox.askyesno(title="Cancelling label",
                                    message="Are you sure you want to cancel? Record will not be saved.")
-        print(sure)
         if sure:
             self.canceled = True
             self.top.destroy()
@@ -75,8 +74,8 @@ class StopWatch:
         self.root = watch_root
         self.photos = photos
         self.init_photo = self.get_photo('break')
-        self.photo_frame = tk.Label(self.root, image=self.init_photo)
-        self.photo_frame.pack(pady=10)
+        self.photo_frame = tk.Label(watch_root, image=self.init_photo)
+        self.photo_frame.grid(row=0, column=0, columnspan=2)
 
         # id for recursive tick function
         self.after_id = None
@@ -84,26 +83,24 @@ class StopWatch:
         self.running = False
         self.seconds = 0
         self.stopwatch_label = tk.Label(watch_root, text=self.get_label(), font=('Helvetica', 48))
-        self.stopwatch_label.pack()
+        self.stopwatch_label.grid(row=1, column=0, columnspan=2)
 
         # main stopwatch buttons - start, pause, reset, quit
-        self.button_frame = tk.Frame(watch_root)
-        self.start_button = tk.Button(self.button_frame, text='start', height=2, width=9, bg='#567', fg='White',
+        self.start_button = tk.Button(watch_root, text='start', height=2, width=9, bg='#567', fg='White',
                                       font=('Arial', 20), command=self.start)
-        self.start_button.pack(side=tk.LEFT)
+        self.start_button.grid(row=3, column=0)
 
-        self.pause_button = tk.Button(self.button_frame, text='pause', height=2, width=9, bg='#567', fg='White',
+        self.pause_button = tk.Button(watch_root, text='pause', height=2, width=9, bg='#567', fg='White',
                                       font=('Arial', 20), command=self.pause)
-        self.pause_button.pack(side=tk.LEFT)
+        self.pause_button.grid(row=3, column=1)
 
-        self.reset_button = tk.Button(self.button_frame, text='reset', height=2, width=9,bg='#567', fg='White',
+        self.reset_button = tk.Button(watch_root, text='reset', height=2, width=9, bg='#567', fg='White',
                                       font=('Arial', 20), command=self.reset)
-        self.reset_button.pack(side=tk.LEFT)
+        self.reset_button.grid(row=4, column=0)
 
-        self.quit_button = tk.Button(self.button_frame, text='save', height=2, width=9, bg='#567', fg='White',
+        self.quit_button = tk.Button(watch_root, text='save', height=2, width=9, bg='#567', fg='White',
                                      font=('Arial', 20), command=self.save)
-        self.quit_button.pack(side=tk.LEFT)
-        self.button_frame.pack()
+        self.quit_button.grid(row=4, column=1)
 
         self.root.bind("<Key>", self.key_pressed)
 
@@ -138,7 +135,6 @@ class StopWatch:
 
     def update_photo(self, cat):
         new_img = self.get_photo(cat)
-        print(new_img)
         self.photo_frame.configure(image=new_img)
         self.photo_frame.image = new_img
 
@@ -230,9 +226,7 @@ class StopWatch:
         self.reset()
 
     def key_pressed(self, event):
-        print(event, event.keycode)
-        if event.keycode == 32: # space pressed
-            print('space')
+        if event.keycode == 32:  # space pressed
             if self.running:
                 self.running = False
                 self.pause()
@@ -240,32 +234,34 @@ class StopWatch:
                 self.running = True
                 self.start()
         elif event.keycode == 27:
-            print('esc')
             sure = messagebox.askyesno(title="Reset", message="Are you sure you want to reset?")
             if sure:
                 self.reset()
 
 
 class PomodoroTimer(StopWatch):
-    def __init__(self, timer_root, photos):
+    def __init__(self, timer_root, pomodoro_hist, photos):
         """
         Initializes pomodoro timer
         :param timer_root: tk root in which to put the elements
         """
-        super().__init__(timer_root, None, photos)
+        super().__init__(timer_root, pomodoro_hist, photos)
+        self.pomodoro_hist = pomodoro_hist
         self.is_focused = True
         self.focus_count = 0
         self.break_count = 0
-        self.focus_string = tk.StringVar(value=str(self.focus_count))
-        self.break_string = tk.StringVar(value=str(self.break_count))
 
-        self.focus_label = tk.Label(timer_root, text='Focus count: ' + str(self.focus_count))
-        self.break_label = tk.Label(timer_root, text='Break count: ' + str(self.break_string))
-        self.focus_label.pack()
-        self.break_label.pack()
+        self.focus_label = tk.Label(timer_root,
+                                    text="Focus count: " + str(self.focus_count))
+        self.break_label = tk.Label(timer_root,
+                                    text="Break count: " + str(self.break_count))
+        self.focus_label.grid(row=2, column=0)
+        self.break_label.grid(row=2, column=1)
 
         self.seconds = 1500
         self.update_label()
+
+        self.photo_frame.configure(bg="red")
 
     def tick(self):
         """
@@ -287,25 +283,40 @@ class PomodoroTimer(StopWatch):
         """
         When second counter hits 0, this function is called to switch from focus to break or vice-versa.
         """
+        record_label = "Break"
         if self.is_focused:
+            record_label = "Focus"
             self.is_focused = False
+
+            self.photo_frame.configure(bg="green")
             self.focus_count += 1
+
             self.reset(300)
-            if start_break := messagebox.askyesno(title="Focus done",
-                                                  message="Great work! Would you like to start the break now?"):
+            self.pause()
+            start_break = messagebox.askyesno(title="Focus done",
+                                              message="Great work! Would you like to start the break now?")
+            if start_break:
                 self.start()
-            else:
-                self.pause()
+                self.update_photo('break')
 
         else:
             self.is_focused = True
+            self.photo_frame.configure(bg="red")
             self.break_count += 1
             self.reset(1500)
-            if start_focus := messagebox.askyesno(title="Break done",
-                                                  message="Break over! Would you like to start working now?"):
+            self.pause()
+            start_focus = messagebox.askyesno(title="Break done",
+                                              message="Break over! Would you like to start working now?")
+            if start_focus:
                 self.start()
-            else:
-                self.pause()
+
+        self.update_pomodoro_labels()
+        record_line = date.today().strftime("%d/%m/%Y") + " | " + record_label
+        self.pomodoro_hist.add_record(record_line, None)
+
+    def update_pomodoro_labels(self):
+        self.focus_label.configure(text="Focus count: " + str(self.focus_count))
+        self.break_label.configure(text="Break count: " + str(self.break_count))
 
 
 class StopWatchHistory:
@@ -333,13 +344,13 @@ class StopWatchHistory:
         self.hist_gui.heading("Length", text="Length", anchor=tk.CENTER)
         self.hist_gui.heading("Label", text="Label", anchor=tk.W)
 
-        self.hist_gui.pack(side=tk.LEFT, padx=5, pady=5)
+        self.hist_gui.grid(row=0, column=0, columnspan=2)
 
         self.init_tree()
 
         # frame on the right side (details)
         self.f = tk.Frame(hist_root, height=350)
-        self.f.pack(side=tk.LEFT, padx=10, pady=20)
+        self.f.grid(row=2, column=0, columnspan=2, padx=10, pady=20)
         self.title_lab = tk.Label(self.f, text='', font=('Arial', 12))
         self.title_lab.pack(anchor='w')
         self.date_lab = tk.Label(self.f, text='', font=('Arial', 10))
@@ -348,8 +359,8 @@ class StopWatchHistory:
         self.length_lab.pack(anchor='w')
 
         # frame for buttons (delete, load, save)
-        self.button_frame = tk.Frame(self.f, pady=5)
-        self.button_frame.pack(side=tk.BOTTOM)
+        self.button_frame = tk.Frame(hist_root, pady=5)
+        self.button_frame.grid(row=1, column=0, columnspan=3)
         self.delete_button = tk.Button(self.button_frame, text='Delete')
         self.delete_button.pack(side=tk.LEFT)
         self.delete_button.configure(state=tk.DISABLED)
@@ -363,11 +374,7 @@ class StopWatchHistory:
         self.hist_gui.bind("<ButtonRelease-1>", self.onselect)
 
         # automatically load records from history.txt
-        try:
-            self.load_records('history.txt')
-        except FileNotFoundError:
-            print("History file not found...")
-            pass
+        self.init_fetch()
 
     def init_tree(self):
         """
@@ -375,6 +382,12 @@ class StopWatchHistory:
         """
         for ind, cat in enumerate(self.history_categories.keys()):
             self.hist_gui.insert(parent='', index='end', iid=cat, text=cat, values=())
+
+    def init_fetch(self):
+        try:
+            self.load_records('stopwatch_history.txt')
+        except FileNotFoundError:
+            print("History file not found...")
 
     def onselect(self, _):
         """
@@ -459,33 +472,34 @@ class StopWatchHistory:
         self.title_lab.configure(text='')
         self.length_lab.configure(text='')
 
+    def is_valid(self, line):
+        """
+        Check if record line is valid (date, timer and label)
+        :param line: line to be checked
+        :return: True if record is valid, False otherwise
+        """
+
+        import re
+
+        elements = line.split(' | ')
+        if len(elements) == 3:
+            # record contains a date of format dd/mm/yyyy
+            valid_date = re.match(r"^\d{2}/\d{2}/\d{4}$", elements[0])
+            # record contains a timer of format hh:mm:ss
+            valid_time = re.match(r"^\d{2}:\d{2}:\d{2}$", elements[1])
+            # record contains a label (between 1 and 10 characters)
+            valid_label = re.match(r"^.{1,10}$", elements[2])
+
+            if valid_date and valid_time and valid_label:
+                return True
+
+        return False
+
     def load_records(self, filename=None):
         """
         Fetch history records from a given file
         :param filename(optional) - filename from which to load records
         """
-        def is_valid(line):
-            """
-            Check if record line is valid (date, timer and label)
-            :param line: line to be checked
-            :return: True if record is valid, False otherwise
-            """
-
-            import re
-
-            elements = line.split(' | ')
-            if len(elements) == 3:
-                # record contains a date of format dd/mm/yyyy
-                valid_date = re.match(r"^\d{2}/\d{2}/\d{4}$", elements[0])
-                # record contains a timer of format hh:mm:ss
-                valid_time = re.match(r"^\d{2}:\d{2}:\d{2}$", elements[1])
-                # record contains a label (between 1 and 10 characters)
-                valid_label = re.match(r"^.{1,10}$", elements[2])
-
-                if valid_date and valid_time and valid_label:
-                    return True
-
-            return False
 
         if not filename:
             # start load by asking for filename
@@ -509,7 +523,7 @@ class StopWatchHistory:
                         label, category = record.split('\t')
                         # if record respects format defined at the start of this function,
                         # isn't duplicate and category is valid
-                        if is_valid(label) and not self.is_duplicate(label, category) \
+                        if self.is_valid(label) and not self.is_duplicate(label, category) \
                                 and category in self.history_categories.keys():
                             # file isn't invalid, as a record was found
                             invalid_file = False
@@ -571,6 +585,64 @@ class StopWatchHistory:
         return False
 
 
+class PomodoroHistory(StopWatchHistory):
+    def __init__(self, hist_root, photos):
+        super().__init__(hist_root, photos)
+        self.hist_gui.destroy()
+        self.hist_gui = ttk.Treeview(hist_root)
+        self.hist_gui['columns'] = ("Date", "Label")
+        self.hist_gui.column("#0", width=1)
+        self.hist_gui.column("Date", width=130, anchor=tk.W)
+        self.hist_gui.column("Label", width=130, anchor=tk.W)
+
+        self.hist_gui.heading("#0", text="")
+        self.hist_gui.heading("Date", text="Date", anchor=tk.W)
+        self.hist_gui.heading("Label", text="Label", anchor=tk.W)
+        self.hist_gui.grid(row=0, column=0, columnspan=2)
+
+    def init_fetch(self):
+        try:
+            self.load_records('pomodoro_history.txt')
+        except FileNotFoundError:
+            pass
+
+    def is_valid(self, line):
+        """
+        Check if record line is valid (date and label)
+        :param line: line to be checked
+        :return: True if record is valid, False otherwise
+        """
+        import re
+
+        elements = line.split(' | ')
+        if len(elements) == 2:
+            # record contains a date of format dd/mm/yyyy
+            valid_date = re.match(r"^\d{2}/\d{2}/\d{4}$", elements[0])
+            # record contains a label (break or focus)
+            valid_label = re.match(r"^(break|work)$", elements[1])
+
+            if valid_date and valid_label:
+                return True
+
+        return False
+
+    def add_record(self, record, _):
+        date, label = record.split(' | ')
+
+        # add record to treeview
+        self.hist_gui.insert(parent='', index=self.index, text="", values=(date, label))
+        self.index += 1
+
+    def delete_record(self, ind, label, _):
+        # delete record from treeview (with index)
+        self.hist_gui.delete(ind)
+
+        self.reset_labels()
+
+        if self.hist_gui.size() == 0:
+            self.delete_button.configure(state=tk.DISABLED)
+
+
 class MainApp:
     def __init__(self, main_root):
         """
@@ -579,37 +651,37 @@ class MainApp:
         """
         self.root = main_root
         self.photos = {}
-        self.photo_categories = ['work', 'break', 'exercise', 'other']
+        self.photo_categories = ['work', 'break']
         for cat in self.photo_categories:
             self.photos[cat] = glob.glob(f'super_secret_pictures/{cat}_*.*')
-        print(self.photos)
 
         # two tabs - stopwatch and history
         self.tab_control = ttk.Notebook(main_root)
         self.tab1 = ttk.Frame(self.tab_control)
         self.tab2 = ttk.Frame(self.tab_control)
         self.tab3 = ttk.Frame(self.tab_control)
+        self.tab4 = ttk.Frame(self.tab_control)
 
         self.tab_control.add(self.tab1, text='Stopwatch')
-        self.tab_control.add(self.tab2, text='History')
+        self.tab_control.add(self.tab2, text='S. History')
         self.tab_control.add(self.tab3, text='Pomodoro')
+        self.tab_control.add(self.tab4, text='P. History')
         self.tab_control.pack()
 
         self.history = StopWatchHistory(self.tab2, self.photos)
         self.stopwatch = StopWatch(self.tab1, self.history, self.photos)
-        self.pomodoro = PomodoroTimer(self.tab3, self.photos)
+        self.pomodoro_history = PomodoroHistory(self.tab4, self.photos)
+        self.pomodoro = PomodoroTimer(self.tab3, self.pomodoro_history, self.photos)
 
         main_root.protocol("WM_DELETE_WINDOW", self.close_app)
-        self.root.bind("<Key>", lambda event: self.key_press(event))
-
-    def key_press(self, event):
-        print(event)
-        print(self.tab_control.select())
 
     def close_app(self):
         """
-        Called when the user presses the 'X' button. Asks confirmation for closing and saving records
+        Called when the user presses the 'X' button
+        Pauses stopwatch and pomodoro, asks confirmation for closing and saving records
         """
+        self.stopwatch.pause()
+        self.pomodoro.pause()
         sure_close = messagebox.askyesno(title="Close", message="Are you sure you want to close this application?")
         if sure_close:
             save = messagebox.askyesno(title="Save", message="Would you like to save your records?")
@@ -621,6 +693,7 @@ class MainApp:
 
 if __name__ == '__main__':
     root = tk.Tk()
+    root.geometry('310x480')
     root.title('Stopwatch')
     root.resizable(False, False)
 
