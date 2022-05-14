@@ -7,12 +7,18 @@ import re
 
 
 class History:
-    def __init__(self, hist_root, columns, labels, photos, init_file):
+    def __init__(self, hist_root, columns, labels, uses_categories, photos, init_file):
         self.root = hist_root
 
         self.photos = photos
         self.init_file = init_file
-        self.history_categories = {}
+        self.uses_categories = uses_categories
+
+        if self.uses_categories:
+            self.history_categories = {col: [] for col in ['Work', 'Study', 'Exercise', 'Other']}
+        else:
+            self.history_categories = {}
+
         self.index = 0
 
         # treeview for history records
@@ -44,9 +50,9 @@ class History:
         self.label_widgets = self._init_labels()
 
         # fetch records from init file, initialize tree
-        self._init_fetch()
         self._init_tree()
         self._initialize_cols_headings()
+        self._init_fetch()
 
     def _init_labels(self):
         widgets = [tk.Label(self.f, text=f'{label}: ', font=('Arial', 12)) for label in self.labels]
@@ -81,7 +87,7 @@ class History:
             self.hist_gui.column(col, width=col_width, anchor=tk.CENTER)
             self.hist_gui.heading(col, text=col, anchor=tk.CENTER)
 
-    def load_records(self, filename=None, process_category=False, show_error=False):
+    def load_records(self, filename=None, show_error=False):
         if not filename:
             # start load by asking for filename
             filename = filedialog.askopenfilename(title="Open file",
@@ -99,7 +105,7 @@ class History:
                 invalid_file = True
                 for record in f:
                     record = record.strip('\n')
-                    if process_category:
+                    if self.uses_categories:
                         # label and category, split by tab '\t'
                         label, category = record.split('\t')
                     else:
@@ -107,7 +113,7 @@ class History:
 
                     # if record respects format, isn't duplicate and category is valid
                     if self.is_valid(label) and not self.is_duplicate(label, category) \
-                            and (not process_category or category in self.history_categories.keys()):
+                            and (not self.uses_categories or category in self.history_categories.keys()):
                         # file isn't invalid, as a record was found
                         invalid_file = False
                         self.add_record(label, category)
@@ -125,8 +131,17 @@ class History:
         """
         Save records to a given filename
         """
-        # no records to save
-        if self.hist_gui.size() == 0:
+
+        total_len = 0
+        if self.uses_categories:
+            for parent in self.hist_gui.get_children():
+                total_len += len([ch for ch in self.hist_gui.get_children(parent)])
+        else:
+            total_len += len(self.hist_gui.get_children())
+
+        print(total_len)
+
+        if total_len == 0:
             messagebox.showerror(title="Error", message="Cannot save empty list.")
             return
 
@@ -151,7 +166,8 @@ class History:
                         f.write(write_line)
             else:
                 for record in self.hist_gui.get_children():
-                    write_line = record + "\n"
+                    item = self.hist_gui.item(record)['values']
+                    write_line = " | ".join(item) + "\n"
                     f.write(write_line)
 
     def onselect(self, _):
@@ -245,10 +261,7 @@ class StopWatchHistory(History):
         When application is started, it will search for file 'history.txt'
         :param hist_root: the root in which to show the history
         """
-        super().__init__(hist_root, ['Date', 'Length', 'Label'], ['Date', 'Length', 'Label'], photos, init_file)
-        self.history_categories = {'Work': [], 'Study': [], 'Exercise': [], 'Other': []}
-        self._init_tree()
-        self._initialize_cols_headings()
+        super().__init__(hist_root, ['Date', 'Length', 'Label'], ['Date', 'Length', 'Label'], True, photos, init_file)
 
     def _init_tree(self):
         """
@@ -294,7 +307,7 @@ class StopWatchHistory(History):
 
 class PomodoroHistory(History):
     def __init__(self, hist_root, photos, init_file="pomodoro_history.txt"):
-        super().__init__(hist_root, ["Date", "Label"], ["Date", "Label"], photos, init_file)
+        super().__init__(hist_root, ["Date", "Label"], ["Date", "Label"], False, photos, init_file)
 
     def _init_tree(self):
         pass
