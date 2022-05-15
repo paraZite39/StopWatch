@@ -105,6 +105,10 @@ class History:
                 invalid_file = True
                 for record in f:
                     record = record.strip('\n')
+
+                    if not record:
+                        break
+
                     if self.uses_categories:
                         # label and category, split by tab '\t'
                         label, category = record.split('\t')
@@ -112,9 +116,12 @@ class History:
                         label, category = record, None
 
                     # if record respects format, isn't duplicate and category is valid
+                    print(label, self.is_valid(label))
+                    print(label, self.is_duplicate(label, category))
                     if self.is_valid(label) and not self.is_duplicate(label, category) \
                             and (not self.uses_categories or category in self.history_categories.keys()):
                         # file isn't invalid, as a record was found
+                        print('here test', label)
                         invalid_file = False
                         self.add_record(label, category)
 
@@ -127,7 +134,7 @@ class History:
             # call function again
             self.load_records()
 
-    def save_records(self, use_categories=False):
+    def save_records(self):
         """
         Save records to a given filename
         """
@@ -139,9 +146,8 @@ class History:
         else:
             total_len += len(self.hist_gui.get_children())
 
-        print(total_len)
 
-        if total_len == 0:
+        if total_len <= 0:
             messagebox.showerror(title="Error", message="Cannot save empty list.")
             return
 
@@ -157,7 +163,7 @@ class History:
             return
 
         with open(filename, 'w') as f:
-            if use_categories:
+            if self.uses_categories:
                 # iterate through records in list box, writing them to file
                 for category in self.history_categories:
                     records = self.history_categories[category]
@@ -268,7 +274,6 @@ class StopWatchHistory(History):
         Takes categories from the 'history_categories' dict and inserts them in treeview
         """
         for ind, cat in enumerate(self.history_categories.keys()):
-            print(ind, cat)
             self.hist_gui.insert(parent='', index=ind, iid=cat, text=cat, values=())
 
     def is_valid(self, line):
@@ -320,10 +325,13 @@ class PomodoroHistory(History):
         """
         elements = line.split(' | ')
         if len(elements) == 2:
+            print(elements)
             # record contains a date of format dd/mm/yyyy
             valid_date = re.match(r"^\d{2}/\d{2}/\d{4}$", elements[0])
+            print(valid_date)
             # record contains a label (break or focus)
-            valid_label = re.match(r"^(break|work)$", elements[1])
+            valid_label = re.match(r"^(Break|Focus)$", elements[1])
+            print(valid_label)
 
             if valid_date and valid_label:
                 return True
@@ -331,6 +339,7 @@ class PomodoroHistory(History):
         return False
 
     def add_record(self, record, category=None):
+        print(record)
         date, label = record.split(' | ')
 
         # add record to treeview
