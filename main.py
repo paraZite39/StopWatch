@@ -31,8 +31,8 @@ class MainApp:
         self.tab_control.add(self.tab4, text='P. History')
         self.tab_control.pack()
 
-        self.history = StopWatchHistory(self.tab2, self.photos)
-        self.stopwatch = StopWatch(self.tab1, self.history, self.photos)
+        self.stopwatch_history = StopWatchHistory(self.tab2, self.photos)
+        self.stopwatch = StopWatch(self.tab1, self.stopwatch_history, self.photos)
         self.pomodoro_history = PomodoroHistory(self.tab4, self.photos)
         self.pomodoro = PomodoroTimer(self.tab3, self.pomodoro_history, self.photos)
 
@@ -47,9 +47,17 @@ class MainApp:
         self.pomodoro.pause()
         sure_close = messagebox.askyesno(title="Close", message="Are you sure you want to close this application?")
         if sure_close:
-            save = messagebox.askyesno(title="Save", message="Would you like to save your records?")
-            if save:
-                self.history.save_records()
+            if self.stopwatch_history.record_count() > 0:
+                save_stopwatch = messagebox.askyesno(title="Save", message="Would you like to save "
+                                                                           "your stopwatch records?")
+                if save_stopwatch:
+                    self.stopwatch_history.save_records(show_error=False, filename=self.stopwatch_history.init_file)
+
+            if self.pomodoro_history.record_count() > 0:
+                save_pomodoro = messagebox.askyesno(title="Save Pomodoro", message="Would you like to save "
+                                                                                   "your pomodoro records?")
+                if save_pomodoro:
+                    self.pomodoro_history.save_records(show_error=False, filename=self.pomodoro_history.init_file)
 
             self.root.destroy()
 

@@ -14,7 +14,7 @@ class Timer:
         self.init_photo = self.get_photo('break')
 
         self.photo_frame = tk.Label(timer_root, image=self.init_photo)
-        self.photo_frame.grid(row=0, column=0, columnspan=2)
+        self.photo_frame.grid(row=0, column=0, columnspan=2, pady=5)
 
         # id for recursive tick function
         self.after_id = None
@@ -198,8 +198,8 @@ class PomodoroTimer(Timer):
         Initializes pomodoro timer
         :param timer_root: tk root in which to put the elements
         """
-        self.focus_seconds = 5
-        self.break_seconds = 3
+        self.focus_seconds = 60 * 25
+        self.break_seconds = 60 * 5
         super().__init__(timer_root, pomodoro_hist, photos, self.focus_seconds)
         self.is_focused = True
         self.focus_count = 0

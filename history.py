@@ -54,6 +54,16 @@ class History:
         self._initialize_cols_headings()
         self._init_fetch()
 
+    def record_count(self):
+        total_records = 0
+        if self.uses_categories:
+            for category in self.history_categories.keys():
+                total_records += len(self.history_categories.get(category, []))
+        else:
+            total_records += len(self.hist_gui.get_children())
+
+        return total_records
+
     def _init_labels(self):
         widgets = [tk.Label(self.f, text=f'{label}: ', font=('Arial', 12)) for label in self.labels]
 
@@ -116,12 +126,9 @@ class History:
                         label, category = record, None
 
                     # if record respects format, isn't duplicate and category is valid
-                    print(label, self.is_valid(label))
-                    print(label, self.is_duplicate(label, category))
                     if self.is_valid(label) and not self.is_duplicate(label, category) \
                             and (not self.uses_categories or category in self.history_categories.keys()):
                         # file isn't invalid, as a record was found
-                        print('here test', label)
                         invalid_file = False
                         self.add_record(label, category)
 
@@ -134,29 +141,25 @@ class History:
             # call function again
             self.load_records()
 
-    def save_records(self):
+    def save_records(self, show_error=True, filename=None):
         """
         Save records to a given filename
         """
 
-        total_len = 0
-        if self.uses_categories:
-            for parent in self.hist_gui.get_children():
-                total_len += len([ch for ch in self.hist_gui.get_children(parent)])
-        else:
-            total_len += len(self.hist_gui.get_children())
-
+        total_len = self.record_count()
 
         if total_len <= 0:
-            messagebox.showerror(title="Error", message="Cannot save empty list.")
+            if show_error:
+                messagebox.showerror(title="Error", message="Cannot save empty list.")
             return
 
-        # prompt for filename
-        filename = filedialog.asksaveasfilename(title="Save file",
-                                                filetypes=(('Text files', '*.txt'),
-                                                           ('All files', '*.*')),
-                                                defaultextension=".txt",
-                                                initialfile=self.init_file)
+        if not filename:
+            # prompt for filename
+            filename = filedialog.asksaveasfilename(title="Save file",
+                                                    filetypes=(('Text files', '*.txt'),
+                                                               ('All files', '*.*')),
+                                                    defaultextension=".txt",
+                                                    initialfile=self.init_file)
 
         # cancel pressed
         if not filename:
